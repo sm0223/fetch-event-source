@@ -42,6 +42,7 @@ export interface FetchEventSourceInit extends RequestInit {
      */
     onerror?: (err: any) => number | null | undefined | void,
 
+    onerrorRetry?: number,
     /**
      * If true, will keep the request open even if the document is hidden.
      * By default, fetchEventSource will close the request and reopen it
@@ -60,6 +61,7 @@ export function fetchEventSource(input: RequestInfo, {
     onmessage,
     onclose,
     onerror,
+    onerrorRetry,
     openWhenHidden,
     fetch: inputFetch,
     ...rest
@@ -126,18 +128,26 @@ export function fetchEventSource(input: RequestInfo, {
                 dispose();
                 resolve();
             } catch (err) {
-                if (!curRequestController.signal.aborted) {
-                    // if we haven't aborted the request ourselves:
-                    try {
-                        // check if we need to retry:
-                        const interval: any = onerror?.(err) ?? retryInterval;
-                        window.clearTimeout(retryTimer);
-                        retryTimer = window.setTimeout(create, interval);
-                    } catch (innerErr) {
-                        // we should not retry anymore:
-                        dispose();
-                        reject(innerErr);
+                onerrorRetry = onerrorRetry == undefined? 0:onerrorRetry;
+                if (onerrorRetry != 0) { // added functionality for number of retry times
+                    onerrorRetry -=1 ;
+                    if (!curRequestController.signal.aborted) {
+                        // if we haven't aborted the request ourselves:
+                        try {
+                            // check if we need to retry:
+                            const interval: any = onerror?.(err) ?? retryInterval;
+                            window.clearTimeout(retryTimer);
+                            retryTimer = window.setTimeout(create, interval);
+                        } catch (innerErr) {
+                            // we should not retry anymore:
+                            dispose();
+                            reject(innerErr);
+                        }
                     }
+                }
+                else{
+                    dispose();
+                    reject(err);
                 }
             }
         }
